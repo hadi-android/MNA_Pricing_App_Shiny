@@ -9,6 +9,8 @@ rsconnect::setAccountInfo(name='hadi',
                           token='F6A716C64B6ED9D28F3BD16910E0458F',
                           secret='UyBYJuzMulvcFesJHQJyEgyZKuhxEsmQsbcAG+mz')
 
+conn <- odbcDriverConnect('driver={SQL Server};server=Tor3e06;database=TE_3E_PROD;trusted_connection=true')
+
 ##load the model and test data globally
 load("model_partner.RData")
 load("data_te_partner.RData")
@@ -21,9 +23,11 @@ load("data_te_other.RData")
 
 ### user input form
 ui <- fluidPage(
-  numericInput(inputId = "PartnerCount", value=1, label = "Number of Partners/Counsels/Principals:"),
-  numericInput(inputId = "AssociateCount", value=0, label = "Number of Associates:"),
-  numericInput(inputId = "OtherCount", value=0, label = "Number of Students/Clerks/Paralegals:"),
+  textAreaInput(inputId="partner_name", label="Please enter the names of partners/counsels/principals, one in each line: ", value = "", width = NULL, height = NULL,
+                cols = NULL, rows = 3, placeholder = NULL, resize = "both"),
+  selectInput(inputId="rate_type", selected = "Standard", label="Please select rate type:",
+              choices = c("Base", "Transfer", "Standard")),
+
   selectInput(inputId="office", label="Where was the office of the highest billing timekeeper?", 
               choices=c("McMillan LLP - Toronto",
                         "McMillan LLP - Montreal",
@@ -92,7 +96,12 @@ server <- function(input, output) {
 
   observeEvent(input$run, {
     
-    # browser()
+    browser()
+    #####################
+    ## get timekeeper info
+    partner_names = unlist(strsplit(input$partner_name,"\n"))
+    source("get_tkprinfo.R")
+    
     ########################################
     ### partner data
     data_te_partner$PPLcount = input$PartnerCount
