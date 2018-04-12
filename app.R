@@ -9,7 +9,7 @@ rsconnect::setAccountInfo(name='hadi',
                           token='F6A716C64B6ED9D28F3BD16910E0458F',
                           secret='UyBYJuzMulvcFesJHQJyEgyZKuhxEsmQsbcAG+mz')
 
-conn <- odbcDriverConnect('driver={SQL Server};server=Tor3e06;database=TE_3E_PROD;trusted_connection=true')
+# conn <- odbcDriverConnect('driver={SQL Server};server=Tor3e06;database=TE_3E_PROD;trusted_connection=true')
 
 ##load the model and test data globally
 load("model_partner.RData")
@@ -23,19 +23,18 @@ load("data_te_other.RData")
 
 ### user input form
 ui <- fluidPage(
-  textAreaInput(inputId="partner_name", label="Please enter the names of partners/counsels/principals, one in each line: ", value = "", width = NULL, height = NULL,
+  textAreaInput(inputId="partner_name", label="Please list the names of partners/counsels/principals, one in each line, in the format lastname, firstname. Please list them in order of expected billable hours, from highest to lowest: ", value = "", width = NULL, height = NULL,
                 cols = NULL, rows = 3, placeholder = NULL, resize = "both"),
-  selectInput(inputId="rate_type", selected = "Standard", label="Please select rate type:",
+  selectInput(inputId="rate_type_partner", selected = "Standard", label="Please select rate type for partners/counsels/princiapls:",
               choices = c("Base", "Transfer", "Standard")),
-
-  selectInput(inputId="office", label="Where was the office of the highest billing timekeeper?", 
-              choices=c("McMillan LLP - Toronto",
-                        "McMillan LLP - Montreal",
-                        "McMillan LLP - Vancouver",
-                        "McMillan LLP - Calgary",
-                        "McMillan LLP - Ottawa"),
-              selected = NULL, multiple = FALSE,
-              selectize = TRUE, width = NULL, size = NULL),
+  textAreaInput(inputId="assoc_name", label="Please list the names of associates, one in each line, in the format lastname, firstname. Please list them in order of expected billable hours, from highest to lowest: ", value = "", width = NULL, height = NULL,
+                cols = NULL, rows = 3, placeholder = NULL, resize = "both"),
+  selectInput(inputId="rate_type_assoc", selected = "Standard", label="Please select rate type for associates:",
+              choices = c("Base", "Transfer", "Standard")),
+  textAreaInput(inputId="other_name", label="Please list the names of clerks/paralegals/students, one in each line, in the format lastname, firstname. Please list them in order of expected billable hours, from highest to lowest: ", value = "", width = NULL, height = NULL,
+                cols = NULL, rows = 3, placeholder = NULL, resize = "both"),
+  selectInput(inputId="rate_type_other", selected = "Standard", label="Please select rate type for clerks/paralegals/students:",
+              choices = c("Base", "Transfer", "Standard")),
   selectInput(inputId = "DollarVal", selected = NULL, label="What is the Dollar value of the deal?",
               choices = c('<$10M','$10MM-$50M', '$50M-$250M', '>$250M')),
   selectInput(inputId = "buyer_seller", selected = NULL, label="Are we representing the vendor or the purchaser?",
@@ -78,147 +77,202 @@ ui <- fluidPage(
 'Private Equity')),
 selectInput(inputId = "primary", selected = NULL, multiple=F, label="What type of purchasers are involved?",
             choices = c("Primary","Secondary")),
-
-selectInput(inputId = "department", selected = NULL, multiple=F, label="What is the practice area of the highest billing lawyer?",
-            choices = c("Business Law","Capital Markets",'Commercial Real Estate',
-                        'Financial Services','Regulatory', 'Tax')),
-numericInput(inputId = "yrsExperience", value=1, label="How long ago did the highest billing lawyer obtain their JD?"),
 selectInput(inputId = "ica_not", selected=NULL, label="Is Investment Canada Act notification required for this deal?",
             choices = c("yes","No")),
 actionButton("run", "Estimate Hours"),
   h2(""),
-  h2(textOutput("out1")),
-  h2(textOutput("out2")),
-  h2(textOutput("out3"))
+  h2(textOutput("out1"))
+  # h2(textOutput("out2")),
+  # h2(textOutput("out3")),
+  # h2(textOutput("out4")),
+  # h2(textOutput("out5"))
 )
 
 server <- function(input, output) {
 
   observeEvent(input$run, {
     
-    browser()
+    # browser()
     #####################
     ## get timekeeper info
     partner_names = unlist(strsplit(input$partner_name,"\n"))
     source("get_tkprinfo.R")
+    partner_info = get_tkprinfo(partner_names, input$rate_type_partner)
+    lead_partner = partner_info[1,]
     
     ########################################
     ### partner data
-    data_te_partner$PPLcount = input$PartnerCount
-    data_te_partner$department = input$department
-    data_te_partner$yrsExperience = input$yrsExperience
-    data_te_partner$What.kind.of.deal.was.it. = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-    buyer_seller = ifelse(input$buyer_seller=="Vendor","seller","buyer")
-    data_te_partner$Did.we.represent.buyer.or.seller. = buyer_seller
-    data_te_partner$ica_not = input$ica_not
-    # browser()
-    pred_partner = predict(model_partner,data_te_partner)
-    pred_partner = exp(pred_partner)*ifelse(input$PartnerCount==0,0,1)
+    if(dim(partner_info)[1]>0 & length(partner_names)>0){
+      data_te_partner$PPLcount = length(partner_names)
+      data_te_partner$department = lead_partner$department
+      data_te_partner$yrsExperience = lead_partner$yrsExperience
+      data_te_partner$What.kind.of.deal.was.it. = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+      buyer_seller = ifelse(input$buyer_seller=="Vendor","seller","buyer")
+      data_te_partner$Did.we.represent.buyer.or.seller. = buyer_seller
+      data_te_partner$ica_not = input$ica_not
+      pred_partner = predict(model_partner,data_te_partner)
+      pred_partner = exp(pred_partner)*ifelse(length(partner_names)==0,0,1)
+    }
     # checked output against ground truth
 
     ##########################################
     ## associate data
-    data_te_assoc$PPLcount=input$AssociateCount
-    data_te_assoc$office=input$office
-    if(input$DollarVal=="<$10M")
-      map = 1
-    else if (input$DollarVal=="$10MM-$50M")
-      map=2
-    else if (input$DollarVal=="$50M-$250M")
-      map=3
+    associate_names = unlist(strsplit(input$assoc_name,"\n"))
+    associate_info = get_tkprinfo(associate_names, input$rate_type_assoc)
+    if(dim(associate_info)[1]>0 & length(associate_names)>0 & dim(partner_info)[1]>0){
+      data_te_assoc$PPLcount= length(associate_names)
+      data_te_assoc$office=lead_partner$office
+      if(input$DollarVal=="<$10M")
+        map = 1
+      else if (input$DollarVal=="$10MM-$50M")
+        map=2
+      else if (input$DollarVal=="$50M-$250M")
+        map=3
+      else
+        map=4
+      
+      data_te_assoc$dolla_val = map
+      data_te_assoc$Did.we.represent.buyer.or.seller..x=buyer_seller
+      data_te_assoc$Did.we.represent.buyer.or.seller..y=buyer_seller
+      data_te_assoc$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
+      data_te_assoc$US = length(grep("USA",input$jurisdiction))
+      data_te_assoc$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
+      data_te_assoc$AB = length(grep("AB",input$jurisdiction))
+      data_te_assoc$BC = length(grep("BC",input$jurisdiction))
+      data_te_assoc$ON = length(grep("ON",input$jurisdiction))
+      data_te_assoc$QC = length(grep("QC", input$jurisdiction))
+      data_te_assoc$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
+      data_te_assoc$What.was.the.client.s.country.of.origin.=input$clientfrom
+      data_te_assoc$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+      data_te_assoc$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
+      data_te_assoc$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
+      # browser()
+      if(input$cocounsel == 'Co-counsel lead')
+        cocounsel = 'Led the deal'
+      else if(input$cocounsel == 'Co-counsel co-lead')
+        cocounsel = 'Co-led'
+      else if (input$cocounsel == 'Co-counsel support McMillan')
+        cocounsel = 'Supported McMillan'
+      else if(input$cocounsel == 'No co-counsel')
+        cocounsel = 'There was no co-counsel'
+      data_te_assoc$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
+      data_te_assoc$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
+      data_te_assoc$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
+      data_te_assoc$Was.the.purhcaser.a.Canadian.or.a.foreign.business. = input$purchaser_from
+      data_te_assoc$Due.diligence..did.McMillan.lead.or.play.supporting.role. = input$due_dil_role
+      data_te_assoc$Closing..Did.McMillan.lead.it.or.played.supporting.role. = input$closing_role
+      data_te_assoc$What.type.of.buyers.were.involved.=input$buyer_type
+      data_te_assoc$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= input$primary
+      data_te_assoc$department = lead_partner$department
+      data_te_assoc$yrsExperience = lead_partner$yrsExperience
+      data_te_assoc$ica_not = input$ica_not
+      data_te_assoc$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+      # browser()
+      # save(data_te_assoc,file="data_te_assoc.RData")
+      pred_assoc = predict(model_associates,data_te_assoc)
+      pred_assoc = exp(pred_assoc)*ifelse(length(associate_names)==0,0,1)
+    }
     else
-      map=4
-    
-    data_te_assoc$dolla_val = map
-    # browser()
-    data_te_assoc$Did.we.represent.buyer.or.seller..x=buyer_seller
-    data_te_assoc$Did.we.represent.buyer.or.seller..y=buyer_seller
-    data_te_assoc$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
-    data_te_assoc$US = length(grep("USA",input$jurisdiction))
-    data_te_assoc$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
-    data_te_assoc$AB = length(grep("AB",input$jurisdiction))
-    data_te_assoc$BC = length(grep("BC",input$jurisdiction))
-    data_te_assoc$ON = length(grep("ON",input$jurisdiction))
-    data_te_assoc$QC = length(grep("QC", input$jurisdiction))
-    data_te_assoc$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
-    data_te_assoc$What.was.the.client.s.country.of.origin.=input$clientfrom
-    data_te_assoc$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-    data_te_assoc$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
-    data_te_assoc$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
-    # browser()
-    if(input$cocounsel == 'Co-counsel lead')
-      cocounsel = 'Led the deal'
-    else if(input$cocounsel == 'Co-counsel co-lead')
-      cocounsel = 'Co-led'
-    else if (input$cocounsel == 'Co-counsel support McMillan')
-      cocounsel = 'Supported McMillan'
-    else if(input$cocounsel == 'No co-counsel')
-      cocounsel = 'There was no co-counsel'
-    data_te_assoc$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
-    data_te_assoc$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
-    data_te_assoc$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
-    data_te_assoc$Was.the.purhcaser.a.Canadian.or.a.foreign.business. = input$purchaser_from
-    data_te_assoc$Due.diligence..did.McMillan.lead.or.play.supporting.role. = input$due_dil_role
-    data_te_assoc$Closing..Did.McMillan.lead.it.or.played.supporting.role. = input$closing_role
-    data_te_assoc$What.type.of.buyers.were.involved.=input$buyer_type
-    data_te_assoc$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= input$primary
-    data_te_assoc$department = input$department
-    data_te_assoc$yrsExperience = input$yrsExperience
-    data_te_assoc$ica_not = input$ica_not
-    data_te_assoc$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-    # browser()
-    # save(data_te_assoc,file="data_te_assoc.RData")
-    pred_assoc = predict(model_associates,data_te_assoc)
-    pred_assoc = exp(pred_assoc)*ifelse(input$AssociateCount==0,0,1)
+      pred_assoc=0
     # checked output against ground truth
     ##################################################################
     ## Other data
-    data_te_other$PPLcount=input$OtherCount
-    data_te_other$office=input$office
-    data_te_other$dolla_val = map
-    data_te_other$Did.we.represent.buyer.or.seller..x=buyer_seller
-    data_te_other$Did.we.represent.buyer.or.seller..y=buyer_seller
-    data_te_other$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
-    data_te_other$US = length(grep("USA",input$jurisdiction))
-    data_te_other$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
-    data_te_other$AB = length(grep("AB",input$jurisdiction))
-    data_te_other$BC = length(grep("BC",input$jurisdiction))
-    data_te_other$ON = length(grep("ON",input$jurisdiction))
-    data_te_other$QC = length(grep("QC", input$jurisdiction))
-    data_te_other$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
-    data_te_other$What.was.the.client.s.country.of.origin.=input$clientfrom
-    data_te_other$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-    data_te_other$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
-    data_te_other$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
-    data_te_other$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
-    data_te_other$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
-    data_te_other$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
-    data_te_other$Was.the.purhcaser.a.Canadian.or.a.foreign.business. = input$purchaser_from
-    data_te_other$Due.diligence..did.McMillan.lead.or.play.supporting.role. = input$due_dil_role
-    data_te_other$Closing..Did.McMillan.lead.it.or.played.supporting.role. = input$closing_role
-    data_te_other$What.type.of.buyers.were.involved.=input$buyer_type
-    data_te_other$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= input$primary
-    data_te_other$department = input$department
-    data_te_other$yrsExperience = input$yrsExperience
-    data_te_other$ica_not = input$ica_not
-    data_te_other$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-
-    pred_other = predict(model_other,data_te_other)
-    pred_other = exp(pred_other)*ifelse(input$OtherCount==0,0,1)
-    # checked output against ground truth
+    other_names = unlist(strsplit(input$other_name,"\n"))
+    other_info = get_tkprinfo(other_names, input$rate_type_other)
+    if(dim(other_info)[1]>0 & length(other_names)>0 & dim(partner_info)[1]>0){
+      data_te_other$PPLcount=length(other_names)
+      data_te_other$office=lead_partner$office
+      data_te_other$dolla_val = map
+      data_te_other$Did.we.represent.buyer.or.seller..x=buyer_seller
+      data_te_other$Did.we.represent.buyer.or.seller..y=buyer_seller
+      data_te_other$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
+      data_te_other$US = length(grep("USA",input$jurisdiction))
+      data_te_other$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
+      data_te_other$AB = length(grep("AB",input$jurisdiction))
+      data_te_other$BC = length(grep("BC",input$jurisdiction))
+      data_te_other$ON = length(grep("ON",input$jurisdiction))
+      data_te_other$QC = length(grep("QC", input$jurisdiction))
+      data_te_other$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
+      data_te_other$What.was.the.client.s.country.of.origin.=input$clientfrom
+      data_te_other$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+      data_te_other$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
+      data_te_other$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
+      data_te_other$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
+      data_te_other$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
+      data_te_other$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
+      data_te_other$Was.the.purhcaser.a.Canadian.or.a.foreign.business. = input$purchaser_from
+      data_te_other$Due.diligence..did.McMillan.lead.or.play.supporting.role. = input$due_dil_role
+      data_te_other$Closing..Did.McMillan.lead.it.or.played.supporting.role. = input$closing_role
+      data_te_other$What.type.of.buyers.were.involved.=input$buyer_type
+      data_te_other$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= input$primary
+      data_te_other$department = lead_partner$department
+      data_te_other$yrsExperience = lead_partner$yrsExperience
+      data_te_other$ica_not = input$ica_not
+      data_te_other$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+  
+      pred_other = predict(model_other,data_te_other)
+      pred_other = exp(pred_other)*ifelse(length(other_names)==0,0,1)
+      
+      
+    }
+    else
+      pred_other = 0
+  
+    source("calculate_fee_margin.R")
+    if(length(partner_names)){
+      output = calculate_fee_margin(pred_partner, pred_assoc, pred_other, 
+                                    partner_info$DefaultRate, associate_info$DefaultRate, other_info$DefaultRate,
+                                    partner_info$DirectCost, associate_info$DirectCost, other_info$DirectCost)
+      fees = output[1]
+      margin_percent = output[2]
+    }
+    else{
+      fees=NA
+      margin_percent=NA
+    }
     
+    getTextOut1 <- function(partner_info, partner_names){
+      if(dim(partner_info)[1]==0)
+        output = paste("Error: no partner/principal/counsel was found with the provided names")
+      else if(length(partner_names)==0)
+        output = paste("Error: partner/principal/counsel box cannot be blank.")
+      else
+        output = paste("Projected hours for partners: ", round(pred_partner), " hours")
+      return(output)
+    }
+    message = getTextOut1(partner_info, partner_names)
+
     output$out1 <- renderText({
-      # browser()
+      # sprintf(message)
       paste("Projected hours for partners: ", round(pred_partner), " hours")
+ 
     })
-    output$out2 <- renderText({
-      # browser()
-      paste("Projected hours for associates: ", round(pred_assoc), " hours")
-    })
-    output$out3 <- renderText({
-      # browser()
-      paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
-    })
+  #   output$out2 <- renderText({
+  #     if(dim(associate_info)[1]==0)
+  #       paste("Error: no associate was found with the provided names")
+  #     else if(length(associate_names)==0)
+  #       paste("Projected hours for associates: 0 hours")
+  #     else if(dim(partner_info)[1]==0)
+  #       paste("Error: hours cannot be estimated without a partner/principal/counsel.")
+  #     else
+  #       paste("Projected hours for associates: ", round(pred_assoc), " hours")
+  #   })
+  #   output$out3 <- renderText({
+  #     if(dim(other_info)[1]==0)
+  #       paste("Error: no cler/paralegal/student was found with the provided names")
+  #     else if(length(other_names)==0)
+  #       paste("Projected hours for associates: 0 hours")
+  #     else if (dim(partner_info)[1]==0)
+  #       paste("Error: hours cannot be estimated without a partner/principal/counsel.")
+  #     else
+  #       paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
+  #   })
+  #   output$out4 <- renderText({
+  #     paste("Total estimated fees is: ", round(fees))
+  #   })
+  #   output$out5 <- renderText({
+  #     paste("Total estimated margin is: ", round(margin_percent))
+  #   })
   })
 }
 
