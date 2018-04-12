@@ -81,11 +81,11 @@ selectInput(inputId = "ica_not", selected=NULL, label="Is Investment Canada Act 
             choices = c("yes","No")),
 actionButton("run", "Estimate Hours"),
   h2(""),
-  h2(textOutput("out1"))
-  # h2(textOutput("out2")),
-  # h2(textOutput("out3")),
-  # h2(textOutput("out4")),
-  # h2(textOutput("out5"))
+  h2(textOutput("out1")),
+  h2(textOutput("out2")),
+  h2(textOutput("out3")),
+  h2(textOutput("out4")),
+  h2(textOutput("out5"))
 )
 
 server <- function(input, output) {
@@ -98,6 +98,7 @@ server <- function(input, output) {
     partner_names = unlist(strsplit(input$partner_name,"\n"))
     source("get_tkprinfo.R")
     partner_info = get_tkprinfo(partner_names, input$rate_type_partner)
+    # load("partner_info.RData")
     lead_partner = partner_info[1,]
     
     ########################################
@@ -113,6 +114,8 @@ server <- function(input, output) {
       pred_partner = predict(model_partner,data_te_partner)
       pred_partner = exp(pred_partner)*ifelse(length(partner_names)==0,0,1)
     }
+    else
+      pred_partner=0
     # checked output against ground truth
 
     ##########################################
@@ -130,7 +133,7 @@ server <- function(input, output) {
         map=3
       else
         map=4
-      
+
       data_te_assoc$dolla_val = map
       data_te_assoc$Did.we.represent.buyer.or.seller..x=buyer_seller
       data_te_assoc$Did.we.represent.buyer.or.seller..y=buyer_seller
@@ -209,18 +212,18 @@ server <- function(input, output) {
       data_te_other$yrsExperience = lead_partner$yrsExperience
       data_te_other$ica_not = input$ica_not
       data_te_other$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-  
+
       pred_other = predict(model_other,data_te_other)
       pred_other = exp(pred_other)*ifelse(length(other_names)==0,0,1)
-      
-      
+
+
     }
     else
       pred_other = 0
-  
+
     source("calculate_fee_margin.R")
-    if(length(partner_names)){
-      output = calculate_fee_margin(pred_partner, pred_assoc, pred_other, 
+    if(length(partner_names)>0){
+      output = calculate_fee_margin(pred_partner, pred_assoc, pred_other,
                                     partner_info$DefaultRate, associate_info$DefaultRate, other_info$DefaultRate,
                                     partner_info$DirectCost, associate_info$DirectCost, other_info$DirectCost)
       fees = output[1]
@@ -230,49 +233,41 @@ server <- function(input, output) {
       fees=NA
       margin_percent=NA
     }
-    
-    getTextOut1 <- function(partner_info, partner_names){
-      if(dim(partner_info)[1]==0)
-        output = paste("Error: no partner/principal/counsel was found with the provided names")
-      else if(length(partner_names)==0)
-        output = paste("Error: partner/principal/counsel box cannot be blank.")
-      else
-        output = paste("Projected hours for partners: ", round(pred_partner), " hours")
-      return(output)
-    }
-    message = getTextOut1(partner_info, partner_names)
 
     output$out1 <- renderText({
-      # sprintf(message)
-      paste("Projected hours for partners: ", round(pred_partner), " hours")
- 
+      if(dim(partner_info)[1]==0)
+        paste("Error: no partner/principal/counsel was found with the provided names")
+      else if(length(partner_names)==0)
+        paste("Error: partner/principal/counsel box cannot be blank.")
+      else
+        paste("Projected hours for partners: ", round(pred_partner), " hours")
     })
-  #   output$out2 <- renderText({
-  #     if(dim(associate_info)[1]==0)
-  #       paste("Error: no associate was found with the provided names")
-  #     else if(length(associate_names)==0)
-  #       paste("Projected hours for associates: 0 hours")
-  #     else if(dim(partner_info)[1]==0)
-  #       paste("Error: hours cannot be estimated without a partner/principal/counsel.")
-  #     else
-  #       paste("Projected hours for associates: ", round(pred_assoc), " hours")
-  #   })
-  #   output$out3 <- renderText({
-  #     if(dim(other_info)[1]==0)
-  #       paste("Error: no cler/paralegal/student was found with the provided names")
-  #     else if(length(other_names)==0)
-  #       paste("Projected hours for associates: 0 hours")
-  #     else if (dim(partner_info)[1]==0)
-  #       paste("Error: hours cannot be estimated without a partner/principal/counsel.")
-  #     else
-  #       paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
-  #   })
-  #   output$out4 <- renderText({
-  #     paste("Total estimated fees is: ", round(fees))
-  #   })
-  #   output$out5 <- renderText({
-  #     paste("Total estimated margin is: ", round(margin_percent))
-  #   })
+    output$out2 <- renderText({
+      if(dim(associate_info)[1]==0)
+        paste("Error: no associate was found with the provided names")
+      else if(length(associate_names)==0)
+        paste("Projected hours for associates: 0 hours")
+      else if(dim(partner_info)[1]==0)
+        paste("Error: hours cannot be estimated without a partner/principal/counsel.")
+      else
+        paste("Projected hours for associates: ", round(pred_assoc), " hours")
+    })
+    output$out3 <- renderText({
+      if(dim(other_info)[1]==0)
+        paste("Error: no cler/paralegal/student was found with the provided names")
+      else if(length(other_names)==0)
+        paste("Projected hours for associates: 0 hours")
+      else if (dim(partner_info)[1]==0)
+        paste("Error: hours cannot be estimated without a partner/principal/counsel.")
+      else
+        paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
+    })
+    output$out4 <- renderText({
+      paste("Total estimated fees is: ", round(fees))
+    })
+    output$out5 <- renderText({
+      paste("Total estimated margin is: ", round(margin_percent))
+    })
   })
 }
 
