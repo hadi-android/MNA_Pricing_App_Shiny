@@ -98,12 +98,12 @@ server <- function(input, output) {
     partner_names = unlist(strsplit(input$partner_name,"\n"))
     source("get_tkprinfo.R")
     partner_info = get_tkprinfo(partner_names, input$rate_type_partner)
-    # load("partner_info.RData")
-    lead_partner = partner_info[1,]
+    if(!is.na(partner_info))
+      lead_partner = partner_info[1,]
     
     ########################################
     ### partner data
-    if(dim(partner_info)[1]>0 & length(partner_names)>0){
+    if(!is.na(partner_info)){
       data_te_partner$PPLcount = length(partner_names)
       data_te_partner$department = lead_partner$department
       data_te_partner$yrsExperience = lead_partner$yrsExperience
@@ -122,7 +122,7 @@ server <- function(input, output) {
     ## associate data
     associate_names = unlist(strsplit(input$assoc_name,"\n"))
     associate_info = get_tkprinfo(associate_names, input$rate_type_assoc)
-    if(dim(associate_info)[1]>0 & length(associate_names)>0 & dim(partner_info)[1]>0){
+    if(!is.na(c(associate_info,partner_info))){
       data_te_assoc$PPLcount= length(associate_names)
       data_te_assoc$office=lead_partner$office
       if(input$DollarVal=="<$10M")
@@ -182,7 +182,7 @@ server <- function(input, output) {
     ## Other data
     other_names = unlist(strsplit(input$other_name,"\n"))
     other_info = get_tkprinfo(other_names, input$rate_type_other)
-    if(dim(other_info)[1]>0 & length(other_names)>0 & dim(partner_info)[1]>0){
+    if(!is.na(c(other_info,partner_info))){
       data_te_other$PPLcount=length(other_names)
       data_te_other$office=lead_partner$office
       data_te_other$dolla_val = map
@@ -222,51 +222,60 @@ server <- function(input, output) {
       pred_other = 0
 
     source("calculate_fee_margin.R")
-    if(length(partner_names)>0){
-      output = calculate_fee_margin(pred_partner, pred_assoc, pred_other,
-                                    partner_info$DefaultRate, associate_info$DefaultRate, other_info$DefaultRate,
-                                    partner_info$DirectCost, associate_info$DirectCost, other_info$DirectCost)
-      fees = output[1]
-      margin_percent = output[2]
+    if(!is.na(partner_info)){
+      if(is.na(associate_info)){
+        rate_associate = 0
+        cost_associate = 0
+      }
+      else{
+        rate_associate = associate_info$DefaultRate
+        cost_associate = associate_info$DirectCost
+      }
+      if(is.na(other_info)){
+        rate_other = 0
+        cost_other = 0
+      }
+      else{
+        rate_other =  other_info$DefaultRate
+        cost_other = other_info$DirectCost
+      }
+      
+      fee_margin = calculate_fee_margin(pred_partner, pred_assoc, pred_other,
+                                    partner_info$DefaultRate, rate_associate, rate_other,
+                                    partner_info$DirectCost, cost_associate, cost_other)
+      fees = fee_margin[1]
+      margin_percent = fee_margin[2]
     }
     else{
       fees=NA
       margin_percent=NA
     }
-
+    
     output$out1 <- renderText({
-      if(dim(partner_info)[1]==0)
-        paste("Error: no partner/principal/counsel was found with the provided names")
+      if(length(partner_names)>0 & is.na(partner_info))
+        paste("Error: invalid names entered for Partner/counsel/principals")
       else if(length(partner_names)==0)
-        paste("Error: partner/principal/counsel box cannot be blank.")
+        paste("Error: Partner/counsel/principals box cannot be blank")
       else
         paste("Projected hours for partners: ", round(pred_partner), " hours")
     })
     output$out2 <- renderText({
-      if(dim(associate_info)[1]==0)
+      if(is.na(associate_info) & length(associate_names)>0)
         paste("Error: no associate was found with the provided names")
-      else if(length(associate_names)==0)
-        paste("Projected hours for associates: 0 hours")
-      else if(dim(partner_info)[1]==0)
-        paste("Error: hours cannot be estimated without a partner/principal/counsel.")
       else
         paste("Projected hours for associates: ", round(pred_assoc), " hours")
     })
     output$out3 <- renderText({
-      if(dim(other_info)[1]==0)
-        paste("Error: no cler/paralegal/student was found with the provided names")
-      else if(length(other_names)==0)
-        paste("Projected hours for associates: 0 hours")
-      else if (dim(partner_info)[1]==0)
-        paste("Error: hours cannot be estimated without a partner/principal/counsel.")
+      if(is.na(other_info) & length(other_names)>0)
+        paste("Error: no clerk/paralegal/student was found with the provided names")
       else
         paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
     })
     output$out4 <- renderText({
-      paste("Total estimated fees is: ", round(fees))
+      paste("Total estimated fees is: $", formatC(as.numeric(fees), format="f", digits=2, big.mark=","), sep="")
     })
     output$out5 <- renderText({
-      paste("Total estimated margin is: ", round(margin_percent))
+      paste("Total estimated margin is: ", round(margin_percent), "%", sep="")
     })
   })
 }
