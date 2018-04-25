@@ -3,6 +3,7 @@ library(caret)
 library(caretEnsemble)
 library(LiblineaR)
 library(leaps)
+library(kknn)
 library(rsconnect)
 
 rsconnect::setAccountInfo(name='hadi',
@@ -12,8 +13,8 @@ rsconnect::setAccountInfo(name='hadi',
 # conn <- odbcDriverConnect('driver={SQL Server};server=Tor3e06;database=TE_3E_PROD;trusted_connection=true')
 
 ##load the model and test data globally
-load("model_partner.RData")
-load("data_te_partner.RData")
+load("model_partner_v2.RData")
+load("data_te_partner_v2.RData")
 
 load("model_associates.RData")
 load("data_te_assoc.RData")
@@ -104,12 +105,47 @@ server <- function(input, output) {
     ########################################
     ### partner data
     if(!is.na(partner_info)){
-      data_te_partner$PPLcount = length(partner_names)
-      data_te_partner$department = lead_partner$department
-      data_te_partner$yrsExperience = lead_partner$yrsExperience
-      data_te_partner$What.kind.of.deal.was.it. = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
       buyer_seller = ifelse(input$buyer_seller=="Vendor","seller","buyer")
-      data_te_partner$Did.we.represent.buyer.or.seller. = buyer_seller
+      data_te_partner$PPLcount = length(partner_names)
+      data_te_partner$office = lead_partner$office
+      if(input$DollarVal=="<$10M")
+        map = 1
+      else if (input$DollarVal=="$10MM-$50M")
+        map=2
+      else if (input$DollarVal=="$50M-$250M")
+        map=3
+      else
+        map=4
+      data_te_partner$dolla_val = map
+      data_te_partner$Did.we.represent.buyer.or.seller..x = buyer_seller
+      data_te_partner$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
+      data_te_partner$AB = length(grep("AB",input$jurisdiction))
+      data_te_partner$BC = length(grep("BC",input$jurisdiction))
+      data_te_partner$ON = length(grep("ON",input$jurisdiction))
+      data_te_partner$QC = length(grep("QC", input$jurisdiction))
+      data_te_partner$Was.the.seller.a.Canadian.or.a.foreign.business. = input$sellerfrom
+      data_te_partner$What.was.the.client.s.country.of.origin.= input$clientfrom
+      data_te_partner$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+      data_te_partner$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
+      if(input$cocounsel == 'Co-counsel lead')
+        cocounsel = 'Led the deal'
+      else if(input$cocounsel == 'Co-counsel co-lead')
+        cocounsel = 'Co-led'
+      else if (input$cocounsel == 'Co-counsel support McMillan')
+        cocounsel = 'Supported McMillan'
+      else if(input$cocounsel == 'No co-counsel')
+        cocounsel = 'There was no co-counsel'
+      data_te_partner$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
+      data_te_partner$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved.=input$num_seller
+      data_te_partner$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
+      data_te_partner$Was.the.purhcaser.a.Canadian.or.a.foreign.business.=input$purchaser_from
+      data_te_partner$Due.diligence..did.McMillan.lead.or.play.supporting.role.=input$due_dil_role
+      data_te_partner$Closing..Did.McMillan.lead.it.or.played.supporting.role.=input$closing_role
+      data_te_partner$What.type.of.buyers.were.involved. = input$buyer_type
+      data_te_partner$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.=input$primary
+      data_te_partner$Did.we.represent.buyer.or.seller..y = buyer_seller
+      data_te_partner$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+      data_te_partner$yrsExperience = lead_partner$yrsExperience
       data_te_partner$ica_not = input$ica_not
       pred_partner = predict(model_partner,data_te_partner)
       pred_partner = exp(pred_partner)*ifelse(length(partner_names)==0,0,1)
@@ -125,15 +161,6 @@ server <- function(input, output) {
     if(!is.na(c(associate_info,partner_info))){
       data_te_assoc$PPLcount= length(associate_names)
       data_te_assoc$office=lead_partner$office
-      if(input$DollarVal=="<$10M")
-        map = 1
-      else if (input$DollarVal=="$10MM-$50M")
-        map=2
-      else if (input$DollarVal=="$50M-$250M")
-        map=3
-      else
-        map=4
-
       data_te_assoc$dolla_val = map
       data_te_assoc$Did.we.represent.buyer.or.seller..x=buyer_seller
       data_te_assoc$Did.we.represent.buyer.or.seller..y=buyer_seller
@@ -149,15 +176,6 @@ server <- function(input, output) {
       data_te_assoc$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
       data_te_assoc$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
       data_te_assoc$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
-      # browser()
-      if(input$cocounsel == 'Co-counsel lead')
-        cocounsel = 'Led the deal'
-      else if(input$cocounsel == 'Co-counsel co-lead')
-        cocounsel = 'Co-led'
-      else if (input$cocounsel == 'Co-counsel support McMillan')
-        cocounsel = 'Supported McMillan'
-      else if(input$cocounsel == 'No co-counsel')
-        cocounsel = 'There was no co-counsel'
       data_te_assoc$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
       data_te_assoc$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
       data_te_assoc$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
