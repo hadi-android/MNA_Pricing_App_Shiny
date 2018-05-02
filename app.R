@@ -103,7 +103,7 @@ server <- function(input, output) {
   })
   
   output$Insturctions = renderText({
-    HTML(paste("<b>Please enter the names (last name, first name), workloads (in percentage), and rate types (Floor, One Office, or Standard) for all timekeepers involved in this matter in the table below.</b>"))
+    HTML(paste("<b>Please enter the names (last name, first name), workloads (in percentage), and rate types (Floor, One Office, or Standard) for all timekeepers involved in this matter in the table below. If workload is unknown, leave the value as zero.</b>"))
   })
   output$hot <- renderRHandsontable({
     DF <- values[["DF"]]
