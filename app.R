@@ -19,17 +19,18 @@ if(file.exists(filename)){
   DF <- data.frame(TimeKeeperName=character(3), Percentage = numeric(3), RateType = character(3), stringsAsFactors = F)
 
 ##load the model and test data globally
-load("model_partner_v2.RData")
-load("data_te_partner_v2.RData")
+load("model_partner_v3.RData")
+load("data_te_partner_v3.RData")
 
-load("model_associates.RData")
-load("data_te_assoc.RData")
+load("model_associate_v2.RData")
+load("data_te_associate_v2.RData")
 
-load("model_other.RData")
-load("data_te_other.RData")
+load("model_other_v2.RData")
+load("data_te_other_v2.RData")
 
 ### user input form
 ui <- fluidPage(
+  numericInput(inputId = "mattNum", value=0, label="Please enter the matter number"),
   htmlOutput("Insturctions"),
   rHandsontableOutput("hot"),
   actionButton("addRow", "Add Row"),
@@ -134,12 +135,12 @@ server <- function(input, output) {
       DF <- DF[-blanks,]
     save(DF, file="table.RData")
     
-    
-    
     # browser()
-    #####################
+    ## get matter type
+    source("getMatterType.R")
+    matterType = getMatterType(input$mattNum)
+    
     ## get timekeeper info
-    # DF = DF[order(-DF$Percentage),]
     workDist = DF$Percentage
     timekeepers = DF$TimeKeeperName
     RateType = DF$RateType
@@ -175,6 +176,7 @@ server <- function(input, output) {
       ########################################
       ### partner data
       if(dim(partner_info)[1]>0 & length(which(DF==""))==0){
+        data_te_partner$MatterType = matterType
         buyer_seller = ifelse(input$buyer_seller=="Vendor","seller","buyer")
         data_te_partner$PPLcount = length(partner_names)
         data_te_partner$office = lead_partner$office
@@ -187,7 +189,7 @@ server <- function(input, output) {
         else
           map=4
         data_te_partner$dolla_val = map
-        data_te_partner$Did.we.represent.buyer.or.seller..x = buyer_seller
+        data_te_partner$Did.we.represent.buyer.or.seller.= buyer_seller
         data_te_partner$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
         data_te_partner$AB = length(grep("AB",input$jurisdiction))
         data_te_partner$BC = length(grep("BC",input$jurisdiction))
@@ -195,7 +197,6 @@ server <- function(input, output) {
         data_te_partner$QC = length(grep("QC", input$jurisdiction))
         data_te_partner$Was.the.seller.a.Canadian.or.a.foreign.business. = input$sellerfrom
         data_te_partner$What.was.the.client.s.country.of.origin.= input$clientfrom
-        data_te_partner$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
         data_te_partner$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
         if(input$cocounsel == 'Co-counsel lead')
           cocounsel = 'Led the deal'
@@ -219,9 +220,9 @@ server <- function(input, output) {
           cocounsel == 'Led the deal' ~ 'Secondary'
         )
         data_te_partner$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.=our_role
-        data_te_partner$Did.we.represent.buyer.or.seller..y = buyer_seller
-        data_te_partner$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-        data_te_partner$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
+        data_te_partner$What.kind.of.deal.was.it.= ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+        # data_te_partner$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
+        data_te_partner$yrsExperience = 8
         data_te_partner$ica_not = input$ica_not
         pred_partner = predict(model_partner,data_te_partner)
         pred_partner = exp(pred_partner)*ifelse(length(partner_names)==0,0,1)
@@ -231,38 +232,38 @@ server <- function(input, output) {
       ##########################################
       ## associate data
       
-        data_te_assoc$PPLcount= length(associate_names)
-        data_te_assoc$office=lead_partner$office
-        data_te_assoc$dolla_val = map
-        data_te_assoc$Did.we.represent.buyer.or.seller..x=buyer_seller
-        data_te_assoc$Did.we.represent.buyer.or.seller..y=buyer_seller
-        data_te_assoc$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
-        data_te_assoc$US = length(grep("USA",input$jurisdiction))
-        data_te_assoc$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
-        data_te_assoc$AB = length(grep("AB",input$jurisdiction))
-        data_te_assoc$BC = length(grep("BC",input$jurisdiction))
-        data_te_assoc$ON = length(grep("ON",input$jurisdiction))
-        data_te_assoc$QC = length(grep("QC", input$jurisdiction))
-        data_te_assoc$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
-        data_te_assoc$What.was.the.client.s.country.of.origin.=input$clientfrom
-        data_te_assoc$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
-        data_te_assoc$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
-        data_te_assoc$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
-        data_te_assoc$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
-        data_te_assoc$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
-        data_te_assoc$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
-        data_te_assoc$Was.the.purhcaser.a.Canadian.or.a.foreign.business. = input$purchaser_from
-        data_te_assoc$Due.diligence..did.McMillan.lead.or.play.supporting.role. = input$due_dil_role
-        data_te_assoc$Closing..Did.McMillan.lead.it.or.played.supporting.role. = input$closing_role
-        data_te_assoc$What.type.of.buyers.were.involved.=input$buyer_type
-        data_te_assoc$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= our_role
-        data_te_assoc$department = lead_partner$department
-        data_te_assoc$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
-        data_te_assoc$ica_not = input$ica_not
-        data_te_assoc$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+        data_te_associate$PPLcount= length(associate_names)
+        data_te_associate$office=lead_partner$office
+        data_te_associate$MatterType = matterType
+        data_te_associate$dolla_val = map
+        data_te_associate$Did.we.represent.buyer.or.seller. = buyer_seller
+        data_te_associate$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
+        data_te_associate$US = length(grep("USA",input$jurisdiction))
+        data_te_associate$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
+        data_te_associate$AB = length(grep("AB",input$jurisdiction))
+        data_te_associate$BC = length(grep("BC",input$jurisdiction))
+        data_te_associate$ON = length(grep("ON",input$jurisdiction))
+        data_te_associate$QC = length(grep("QC", input$jurisdiction))
+        data_te_associate$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
+        data_te_associate$What.was.the.client.s.country.of.origin.=input$clientfrom
+        data_te_associate$What.kind.of.deal.was.it.= ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+        data_te_associate$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
+        data_te_associate$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
+        data_te_associate$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
+        data_te_associate$How.many.sellers..individuals..trusts..partnerships..corporations..were.involved. = input$num_seller
+        data_te_associate$How.many.purchasers..individuals..trusts..partnerships..corporations..were.involved. = input$num_purchaser
+        data_te_associate$Was.the.purhcaser.a.Canadian.or.a.foreign.business. = input$purchaser_from
+        data_te_associate$Due.diligence..did.McMillan.lead.or.play.supporting.role. = input$due_dil_role
+        data_te_associate$Closing..Did.McMillan.lead.it.or.played.supporting.role. = input$closing_role
+        data_te_associate$What.type.of.buyers.were.involved.=input$buyer_type
+        data_te_associate$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= our_role
+        data_te_associate$department = lead_partner$department
+        # data_te_associate$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
+        data_te_associate$yrsExperience = 8
+        data_te_associate$ica_not = input$ica_not
         # browser()
         # save(data_te_assoc,file="data_te_assoc.RData")
-        pred_assoc = predict(model_associates,data_te_assoc)
+        pred_assoc = predict(model_associate,data_te_associate)
         pred_assoc = exp(pred_assoc)*ifelse(length(associate_names)==0,0,1)
 
       # checked output against ground truth
@@ -271,9 +272,9 @@ server <- function(input, output) {
 
         data_te_other$PPLcount=length(other_names)
         data_te_other$office=lead_partner$office
+        data_te_other$MatterType = matterType
         data_te_other$dolla_val = map
-        data_te_other$Did.we.represent.buyer.or.seller..x=buyer_seller
-        data_te_other$Did.we.represent.buyer.or.seller..y=buyer_seller
+        data_te_other$Did.we.represent.buyer.or.seller. = buyer_seller
         data_te_other$Non_MCM = length(grep('A Canadian province/territory other than the above',input$jurisdiction))
         data_te_other$US = length(grep("USA",input$jurisdiction))
         data_te_other$Other.foreign.jursidiction = length(grep("Other Foreign",input$jurisdiction))
@@ -283,7 +284,7 @@ server <- function(input, output) {
         data_te_other$QC = length(grep("QC", input$jurisdiction))
         data_te_other$Was.the.seller.a.Canadian.or.a.foreign.business.= input$sellerfrom
         data_te_other$What.was.the.client.s.country.of.origin.=input$clientfrom
-        data_te_other$What.kind.of.deal.was.it..x = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
+        data_te_other$What.kind.of.deal.was.it.= ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
         data_te_other$Was.this.a..normal.course..transaction.or.a..one.off..for.the.client..i.e..the.client.has.done.many.similar.deals.. = input$oneoff
         data_te_other$Was.this.an..as.is.where.is..deal.or.normal.reps.and.warranties. = input$reps_warranties
         data_te_other$Did.the.co.counsel.lead.the.deal.or.support.McMillan.s.role. = cocounsel
@@ -295,9 +296,9 @@ server <- function(input, output) {
         data_te_other$What.type.of.buyers.were.involved.=input$buyer_type
         data_te_other$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= our_role
         data_te_other$department = lead_partner$department
-        data_te_other$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
+        data_te_other$yrsExperience = 8 
+          # ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
         data_te_other$ica_not = input$ica_not
-        data_te_other$What.kind.of.deal.was.it..y = ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
   
         pred_other = predict(model_other,data_te_other)
         pred_other = exp(pred_other)*ifelse(length(other_names)==0,0,1)
@@ -333,6 +334,7 @@ server <- function(input, output) {
                                       partner_info$DefaultRate, rate_associate, rate_other,
                                       partner_info$DirectCost, cost_associate, cost_other)
         fees = fee_margin[1]
+        fees_sd = fees*0.18
         margin_percent = fee_margin[2]
       }
       else{
@@ -379,7 +381,7 @@ server <- function(input, output) {
         paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
     })
     output$out4 <- renderText({
-      paste("Total estimated fees is: $", formatC(as.numeric(fees), format="f", digits=2, big.mark=","), sep="")
+      paste("Total estimated fees is: $", formatC(as.numeric(fees), format="f", digits=2, big.mark=","), " +/- ", formatC(fees_sd, format="f", digits=2, big.mark=","), sep="")
     })
     output$out5 <- renderText({
       paste("Total estimated margin is: ", round(margin_percent), "%", sep="")
