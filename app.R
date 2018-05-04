@@ -30,8 +30,8 @@ load("data_te_other_v2.RData")
 
 ### user input form
 ui <- fluidPage(
-  numericInput(inputId = "mattNum", value=0, label="Please enter the matter number"),
-  textInput(inputId = "lead_partner", label= "Please enter the name (last, first) of the partner expected to put in the most hours for this deal."),
+  numericInput(inputId = "mattNum", value=254184, label="Please enter the matter number"),
+  textInput(inputId = "lead_partner", value="Wong, E", label= "Please enter the name (last, first) of the partner expected to put in the most hours for this deal."),
   numericInput(inputId = "PartnerCount", value=0, label="Please enter the number of partners/principals/counsels that will be involved in the deal."),
   numericInput(inputId = "AccociateCount", value=0, label="Please enter the number of associates that will be involved in the deal."),
   numericInput(inputId = "OtherCount", value=0, label="Please enter the number of clerks/students/paralegals that will be involved in the deal."),
@@ -110,6 +110,8 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
+  values <- reactiveValues()
+  
   observeEvent(input$run, {
     
     #get lead partner info
@@ -174,7 +176,7 @@ server <- function(input, output) {
     ##########################################
     ## associate data
     # isolate(data_te_associate)
-    data_te_associate$PPLcount = input$AssociateCount
+    data_te_associate$PPLcount = ifelse(is.null(input$AssociateCount),0,input$AccociateCount)
     data_te_associate$office=lead_partner$office
     data_te_associate$MatterType = matterType
     data_te_associate$dolla_val = map
