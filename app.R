@@ -16,7 +16,7 @@ filename = "table.RData"
 if(file.exists(filename)){
   load(filename)
 }else
-  DF <- data.frame(TimeKeeperName=character(3), Percentage = numeric(3), RateType = character(3), stringsAsFactors = F)
+  DF <- data.frame(TimeKeeperName=character(3), Hours = numeric(3), RateType = character(3), stringsAsFactors = F)
 
 ##load the model and test data globally
 load("model_partner_v3.RData")
@@ -27,6 +27,10 @@ load("data_te_associate_v2.RData")
 
 load("model_other_v2.RData")
 load("data_te_other_v2.RData")
+
+pred_partner = NA
+pred_assoc = NA
+pred_other = NA
 
 ### user input form
 ui <- fluidPage(
@@ -82,33 +86,22 @@ ui <- fluidPage(
   h2(textOutput("out1")),
   h2(textOutput("out2")),
   h2(textOutput("out3")),
+  h2(""),
   conditionalPanel(
     condition = "input.run>0",
     htmlOutput("Insturctions"),
     rHandsontableOutput("hot"),
     actionButton("addRow", "Add Row"),
-    actionButton("getFees", "Estimate Fees")
+    actionButton("getFees", "Estimate Fees"),
+    h2(""),
+    h2(textOutput("out4")),
+    h2(textOutput("out5"))
   )
-    
-  # ),
-  # conditionalPanel(
-  #   condition = "errors == FALSE",
-  #   rHandsontableOutput("hot")
-  # ),
-  # conditionalPanel(
-  #   condition = "errors == FALSE",
-  #   actionButton("addRow", "Add Row")
-  # ),
-  # conditionalPanel(
-  #   condition = "errors == FALSE",
-  #   actionButton("getFees", "Estimate Fees")
-  # ),
-  # h2(""),
-  # h2(textOutput("out4")),
-  # h2(textOutput("out5"))
 )
 
 server <- function(input, output) {
+  
+  values <- reactiveValues()
   
   observeEvent(input$run, {
     
@@ -167,10 +160,10 @@ server <- function(input, output) {
       data_te_partner$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.=our_role
       data_te_partner$What.kind.of.deal.was.it.= ifelse(length(input$share_asset)==2,"Share;#Asset",input$share_asset)
       data_te_partner$deparment = lead_partner$department
-      data_te_partner$yrsExperience = 8 #ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
+      data_te_partner$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
       data_te_partner$ica_not = input$ica_not
-      pred_partner = predict(model_partner,data_te_partner)
-      pred_partner = exp(pred_partner)*ifelse(input$PartnerCount==0,0,1)
+      pred_partner <<- predict(model_partner,data_te_partner)
+      pred_partner <<- round(exp(pred_partner))*ifelse(input$PartnerCount==0,0,1)
   
       # checked output against ground truth
   
@@ -203,12 +196,12 @@ server <- function(input, output) {
       data_te_associate$What.type.of.buyers.were.involved.=input$buyer_type
       data_te_associate$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= our_role
       data_te_associate$department = lead_partner$department
-      data_te_associate$yrsExperience = 8#ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
+      data_te_associate$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
       data_te_associate$ica_not = input$ica_not
       # browser()
       # save(data_te_assoc,file="data_te_assoc.RData")
-      pred_assoc = predict(model_associate,data_te_associate)
-      pred_assoc = exp(pred_assoc)*ifelse(input$AssociateCount==0,0,1)
+      pred_assoc <<- predict(model_associate,data_te_associate)
+      pred_assoc <<- round(exp(pred_assoc))*ifelse(input$AssociateCount==0,0,1)
   
       # checked output against ground truth
       ##################################################################
@@ -241,10 +234,10 @@ server <- function(input, output) {
       data_te_other$Was.McMillan.the.primary.counsel.for.the.client.s.transaction.or.did.we.play.a.secondary.role.supporting.the.primary.counsel.= our_role
       data_te_other$department = lead_partner$department
       data_te_other$ica_not = input$ica_not
-      data_te_other$yrsExperience = 8
+      data_te_other$yrsExperience = ifelse(is.na(lead_partner$yrsExperience),20,lead_partner$yrsExperience)
   
-      pred_other = predict(model_other,data_te_other)
-      pred_other = exp(pred_other)*ifelse(input$OtherCount==0,0,1)
+      pred_other <<- predict(model_other,data_te_other)
+      pred_other <<- round(exp(pred_other))*ifelse(input$OtherCount==0,0,1)
     }
     else{
       pred_partner=NA
@@ -267,8 +260,160 @@ server <- function(input, output) {
     output$out3 <- renderText({
         paste("Projected hours for students/clerks/paralegals: ", round(pred_other), " hours")
     })
+    
+    ## Handsontable
+    observe({
+      if (!is.null(input$hot)) {
+        values[["previous"]] <- isolate(values[["DF"]])
+        DF = hot_to_r(input$hot)
+      } else {
+        if (is.null(values[["DF"]]))
+          DF <- DF
+        else
+          DF <- values[["DF"]]
+      }
+      values[["DF"]] <- DF
+    })
+    output$Insturctions = renderText({
+      HTML(paste("<b>Please enter the names (last name, first name), hours, and rate types (Floor, One Office, or Standard) for all timekeepers involved in this matter in the table below.</b>"))
+    })
+    output$hot <- renderRHandsontable({
+      DF <- values[["DF"]]
+      if (!is.null(DF)){
+        DF[1,1] = input$lead_partner
+        # DF[1,3] = "Standard"
+        rhandsontable(DF, stretchH = "all")
+      }
+    })
+    
+  }) # end observeEvent(input$run)
+  
+  observeEvent(input$addRow, {
+    DF <- isolate(values[["DF"]])
+    values[["previous"]] <- DF
+    newDF = DF[1,]
+    newDF$TimeKeeperName = ""
+    newDF$Hours = 0
+    newDF$RateType=""
+    DF<-rbind(DF,newDF)
+    rownames(DF) = c(1:dim(DF)[1])
+    values[["DF"]] <- DF
   })
-   
-}
+  
+  observeEvent(input$getFees, {
+    DF <- isolate(values[["DF"]])
+    DF <- DF[complete.cases(DF$TimeKeeperName),]
+    blanks = which(DF$TimeKeeperName == "")
+    
+    if(length(blanks)>0)
+      DF <- DF[-blanks,]
+    # save(DF, file="table.RData")
+    
+    ## get timekeeper info
+    workDist = DF$Hours
+    timekeepers = DF$TimeKeeperName
+    RateType = DF$RateType
+    
+    RateType <- case_when(
+      tolower(RateType) == "standard" ~ "Standard",
+      tolower(RateType) == "floor" ~ "Base",
+      tolower(RateType) == "one office" ~ "Transfer"
+    )
+    if(any(is.na(RateType))==FALSE){
+      rate_na = FALSE
+      source("get_tkprinfo.R")
+      result = get_tkprinfo(timekeepers, RateType)
+      timekeeper_info = result[[1]]
+      names_found = result[[2]]
+      if(dim(timekeeper_info)[1] == dim(DF)[1]){
+        timekeeper_info$RateType = RateType
+        timekeeper_info$Hours= workDist
+      }
+      else
+        names_notfound = timekeepers[which(!(timekeepers %in% timekeeper_info$DisplayName))]
+      
+      if(dim(timekeeper_info)[1] == dim(DF)[1] & dim(timekeeper_info)[1] > 0){
+        partner_info = subset(timekeeper_info,timekeeper_info$section %in% c("Equity Partner","Non-Equity Partner", "Principal", 
+                                                                             "Partner", "Contract Partner", "Counsel", "Other Counsel"))
+        partner_info = partner_info[order(-partner_info$Hours),]
+        partner_names = partner_info$DisplayName
+        associate_info = subset(timekeeper_info, timekeeper_info$section == "Associate")
+        associate_names = associate_info$DisplayName
+        other_info =     subset(timekeeper_info, !(timekeeper_info$DisplayName %in% c(partner_info$DisplayName,associate_info$DisplayName)))
+        other_names = other_info$DisplayName
+      }
+      
+      source("calculate_fee_margin.R")
+      if(dim(partner_info)[1]>0){
+        if(dim(associate_info)[1]==0){
+          rate_associate = 0
+          cost_associate = 0
+        }
+        else{
+          rate_associate = associate_info$DefaultRate
+          cost_associate = associate_info$DirectCost
+        }
+        if(dim(other_info)[1]==0){
+          rate_other = 0
+          cost_other = 0
+        }
+        else{
+          rate_other =  other_info$DefaultRate
+          cost_other = other_info$DirectCost
+        }
+        
+        fee_margin = calculate_fee_margin(pred_partner, pred_assoc, pred_other,
+                                          partner_info$Hours, associate_info$Hours, other_info$Hours,
+                                          partner_info$DefaultRate, rate_associate, rate_other,
+                                          partner_info$DirectCost, cost_associate, cost_other)
+        
+        # browser()
+        if (is.na(fee_margin)){
+          dont_addup = 1
+          margin_percent = NA
+        }
+        else{
+          dont_addup = 0
+          fees = fee_margin[1]
+          fees_sd = fees*0.18
+          margin_percent = fee_margin[2]
+        }
+      }
+      else{
+        fees=NA
+        margin_percent=NA
+      }
+    } 
+    else{
+      rate_na = TRUE
+    }#end if RateType has NA
+    
+    output$out4 <- renderText({
+      if(rate_na==TRUE)
+        paste("Error: rate type is missing for one or more entries. Please provide rate type.")
+      else{
+        if(dont_addup==1)
+          paste("Error: the hours provided don't add up to the hours estimated.")
+        else if(nrow(partner_info) != input$PartnerCount | nrow(associate_info) != input$AssociateCount | nrow(other_info) != input$OtherCount)
+          paste("Error: the timekeepers provided in the table must match the number of timekeepers expected to work provided in the questionnaire.")
+        else{
+          paste("Total estimated fees is: $", formatC(as.numeric(fees), format="f", digits=2, big.mark=","), " +/- ", formatC(fees_sd, format="f", digits=2, big.mark=","), sep="")
+        }
+      }
+    })
+    output$out5 <- renderText({
+      if(rate_na==TRUE)
+        paste("")
+      else{
+        if(dont_addup==1 | nrow(partner_info) != input$PartnerCount | nrow(associate_info) != input$AssociateCount | nrow(other_info) != input$OtherCount)
+          paste("")
+        else
+          paste("Total estimated margin is: ", round(margin_percent), "%", sep="")
+      }
+    })
+
+    
+  })# end of getFees observeEvent
+} # end of server function
 
 shinyApp(ui = ui, server = server)
